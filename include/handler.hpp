@@ -17,18 +17,19 @@ class session;
 
 class Handler : public std::enable_shared_from_this<Handler> {
 public:
-  explicit Handler(std::shared_ptr<session> session, const std::string target);
+  explicit Handler(session* session);
 
   ~Handler();
   void start();
 
   void on_write(beast::error_code ec, std::size_t bytes_transferred);
   void on_read(beast::error_code ec, std::size_t bytes_transferred);
+  void do_write(const std::string target);
 
 private:
   beast::flat_buffer buffer_; // (Must persist between reads)
   http::request<http::empty_body> req_;
   http::response<http::string_body> res_;
   std::string mTarget;
-  std::shared_ptr<session> mSession;
+  session* mSession;
 };

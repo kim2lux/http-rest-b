@@ -1,13 +1,13 @@
 #include "handler.hpp"
 #include "session.hpp"
 
-Handler::Handler(std::shared_ptr<session> session, const std::string target)
-    : mTarget(target), mSession(session) {
+Handler::Handler(session *session) : mSession(session) {
+  std::cout << "creating new handler" << std::endl;
+
   // Set up an HTTP GET request message
   req_.version(11);
   req_.method(http::verb::get);
-  req_.target(target);
-  req_.set(http::field::host, mSession->mHost);
+  req_.set(http::field::host, "api.binance.com");
   req_.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
 }
 
@@ -16,22 +16,24 @@ Handler::~Handler() {
 }
 
 void Handler::start() {
-  http::async_write(
-      mSession->stream_, req_,
-      beast::bind_front_handler(&Handler::on_write, shared_from_this()));
+  std::cout << "start handler read" << std::endl;
+  res_ = http::response<http::string_body>{};
+  http::async_read(
+      mSession->stream_, buffer_, res_,
+      beast::bind_front_handler(&Handler::on_read, shared_from_this()));
 }
 
 void Handler::on_write(beast::error_code ec, std::size_t bytes_transferred) {
   boost::ignore_unused(bytes_transferred);
-
   if (ec)
-    return fail(ec, "write");
+     fail(ec, "write");
+}
 
-  // Receive the HTTP response
-  std::cout << "reading response request: " << bytes_transferred << std::endl;
-  http::async_read(
-      mSession->stream_, buffer_, res_,
-      beast::bind_front_handler(&Handler::on_read, shared_from_this()));
+void Handler::do_write(const std::string target) {
+  req_.target(target);
+  std::cout << "writing request: " <<  req_ << std::endl;
+  http::async_write(
+      mSession->stream_, req_,beast::bind_front_handler(&Handler::on_write, shared_from_this()));
 }
 
 void Handler::on_read(beast::error_code ec, std::size_t bytes_transferred) {
@@ -46,12 +48,20 @@ void Handler::on_read(beast::error_code ec, std::size_t bytes_transferred) {
   std::cout << "body" << std::endl;
   std::cout << res_.body() << std::endl;
   std::cout << "end msg" << std::endl;
-  res_.clear();
+  buffer_.consume(buffer_.size());
 
   boost::asio::deadline_timer t(mSession->mIoc, boost::posix_time::seconds(2));
-  t.wait();
-  std::cout << "sending new request" << std::endl;
-  http::async_write(
-      mSession->stream_, req_,
-      beast::bind_front_handler(&Handler::on_write, shared_from_this()));
+  auto request = mSession->mRequest.get();
+  if (request) {
+      auto [req, handle] = (*request);
+      std::cout << "calling handler for request: " << req << std::endl;
+      std::string data{res_.body()};
+      handle(data);
+  }
+  //   t.wait();
+  //   std::cout << "sending new request" << std::endl;
+  //   http::async_write(
+  //       mSession->stream_, req_,
+  //       beast::bind_front_handler(&Handler::on_write, shared_from_this()));
+  start();
 }

@@ -4,7 +4,14 @@
 #include <boost/beast.hpp>
 #include <boost/beast/http.hpp>
 #include <boost/asio/ssl.hpp>
+#include <boost/asio/io_service_strand.hpp>
 #include <boost/beast/ssl/ssl_stream.hpp>
+#include <queue>
+#include <memory>
+#include "request_buffer.hpp"
+#include <functional>
+
+class Handler;
 
 namespace beast = boost::beast;   // from <boost/beast.hpp>
 namespace http = beast::http;     // from <boost/beast/http.hpp>
@@ -23,6 +30,9 @@ public:
   void on_handshake(beast::error_code ec);
   void on_shutdown(beast::error_code ec);
 
+  void ExecRequest(typename RequestBuffer<std::function<void(std::string)>>::RequestType);
+  void NewRequest(std::string request, std::function<void(std::string)>);
+
 private:
   tcp::resolver resolver_;
 
@@ -31,4 +41,8 @@ public:
   std::string mPort;
   beast::ssl_stream<beast::tcp_stream> stream_;
   net::io_context& mIoc;
+  boost::asio::io_context::strand strand_request;
+  std::shared_ptr<Handler> mHandler;
+  RequestBuffer<std::function<void(std::string)>> mRequest;
+  bool mSessionReady{false};
 };
