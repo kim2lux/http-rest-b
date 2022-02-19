@@ -8,9 +8,9 @@
 #include <sstream>
 #include <utility>
 
-template <typename Callback, size_t SIZE = 1024> class RequestBuffer {
-public:
-  using RequestType = std::pair<std::string, Callback>;
+template <typename Callback, size_t SIZE = 4096> class RequestBuffer {
+private:
+
   static constexpr uint64_t LOG2(uint64_t size, int p = 0) {
     return size <= 1 ? p : LOG2(size / 2, p + 1);
   }
@@ -20,9 +20,12 @@ public:
   static constexpr uint64_t mSize = GetClosestExp(SIZE);
   static constexpr uint64_t mRingMask = GetClosestExp(SIZE) - 1;
 
+public:
+  using RequestType = std::pair<std::string, Callback>;
+
   void add(RequestType request) {
     if (mWritePos - mReadPos >= mSize) {
-      //should just return an error, let's throw for now
+      //could only return an error
       std::stringstream ss;
       ss << "Queue full: " << mWritePos << " " << mReadPos << std::endl;
       throw ss.str();
