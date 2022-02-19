@@ -10,7 +10,6 @@
 
 template <typename Callback, size_t SIZE = 4096> class RequestBuffer {
 private:
-
   static constexpr uint64_t LOG2(uint64_t size, int p = 0) {
     return size <= 1 ? p : LOG2(size / 2, p + 1);
   }
@@ -25,31 +24,25 @@ public:
 
   void add(RequestType request) {
     if (mWritePos - mReadPos >= mSize) {
-      //could only return an error
+      // could only return an error
       std::stringstream ss;
-      ss << "Queue full: " << mWritePos << " " << mReadPos << std::endl;
+      ss << "Write buffer full: " << mWritePos << " " << mReadPos << std::endl;
       throw ss.str();
     }
-    std::cout << "write position in: " << (mWritePos & mRingMask) << std::endl;
     mRequests[mWritePos & mRingMask] = request;
     mWritePos++;
   }
 
   std::optional<RequestType> get() {
     uint64_t localReadPos = mReadPos.load(std::memory_order_relaxed);
-    std::cout << "try get: " << (localReadPos & mRingMask) << std::endl;
-    if (localReadPos >= mWritePos) {
-    std::cout << "get NULL ERROR: " << (localReadPos & mRingMask) << std::endl;
-      return std::nullopt;
-    }
     do {
       localReadPos = mReadPos.load(std::memory_order_relaxed);
       if (localReadPos >= mWritePos) {
-    std::cout << "get NULL ERROR: " << (localReadPos & mRingMask) << std::endl;
+        std::cout << "Read buffer empty: " << (localReadPos & mRingMask)
+                  << std::endl;
         return std::nullopt;
       }
     } while (!mReadPos.compare_exchange_strong(localReadPos, localReadPos + 1));
-    std::cout << "get: " << (localReadPos & mRingMask) << std::endl;
     return mRequests[localReadPos & mRingMask];
   }
 

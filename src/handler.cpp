@@ -22,7 +22,6 @@ void Handler::OnRead(beast::error_code ec, std::size_t bytes_transferred) {
   if (ec)
     helper::Fail(ec, "read");
 
-  boost::asio::deadline_timer t(mSession->mIoc, boost::posix_time::seconds(2));
   auto request = mSession->mRequest.get();
   if (request) {
       auto [req, handle] = (*request);
