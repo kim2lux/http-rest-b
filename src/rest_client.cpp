@@ -6,6 +6,7 @@ template <typename DecoderType>
 RestClient<DecoderType>::RestClient(const char *host, const char *port, DecoderType &decoder)
     : ctx{ssl::context::tlsv12_client}, mHost{host}, mPort{port},
       mDecoder(decoder) {
+  static_assert(std::is_base_of_v<DecoderType, APIHandlerInterface> == true);
   load_root_certificates(ctx);
 
   // Verify the remote server's certificate
