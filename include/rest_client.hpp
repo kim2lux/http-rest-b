@@ -12,7 +12,6 @@
 #include <boost/asio/signal_set.hpp>
 
 #include "helper.hpp"
-#include "root_certificates.hpp"
 #include "session.hpp"
 
 namespace net = boost::asio;
@@ -41,16 +40,7 @@ public:
   // UnsubscribeEndpoint
   template <typename F, typename = std::enable_if_t<
                             std::is_invocable_v<F, const std::string &>>>
-   RequestStatus AsyncRequest(std::string request, F &&fn) {
-       std::string newRequest{request.insert(0, cPrefix)};
-       if (mSession->mError) {
-           return RequestStatus::SessionError;
-       }
-       if (mStopSubscriber) {
-           return RequestStatus::EndSubscribeRequest;
-       }
-      return mSession->AsyncRequest(newRequest, fn);
-  }
+   RequestStatus AsyncRequest(std::string request, F &&fn);
   void run();
 
 private:

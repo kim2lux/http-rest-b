@@ -13,10 +13,8 @@ RestClient<DecoderType>::RestClient(const char *host, const char *port,
   // Start an asynchronous wait for one of the signals to occur.
   mSignal.async_wait(std::bind(&RestClient<DecoderType>::SignalHandler, this,
                                std::placeholders::_1, std::placeholders::_2));
-  load_root_certificates(mCtx);
 
-  // Verify the remote server's certificate
-  mCtx.set_verify_mode(ssl::verify_peer);
+  mCtx.set_verify_mode(boost::asio::ssl::verify_none);
   mSession = std::make_shared<Session>(mIoc, mCtx, mHost, mPort);
   std::cout << "timeout per message: " << cTimeoutMs << std::endl;
   mSession->run();
@@ -26,7 +24,7 @@ template <typename DecoderType>
 void RestClient<DecoderType>::SignalHandler(
     [[maybe_unused]] const boost::system::error_code &error, [[maybe_unused]] int signal_number) {
   mStopSubscriber.store(true);
-  std::cout << "Stopping session" << std::endl;
+  std::cout << "Stopping Client..." << std::endl;
   mSession->Stop();
 }
 
@@ -66,6 +64,20 @@ template <typename DecoderType> void RestClient<DecoderType>::run() {
   LaunchTaskSubscribe();
   mIoc.run();
   mFutTasks.wait_for(std::chrono::milliseconds{1000});
+}
+
+template <typename DecoderType>
+template <typename F, typename CallType>
+RequestStatus RestClient<DecoderType>::AsyncRequest(std::string request,
+                                                    F &&fn) {
+  std::string newRequest{request.insert(0, cPrefix)};
+  if (mSession->mError) {
+    return RequestStatus::SessionError;
+  }
+  if (mStopSubscriber) {
+    return RequestStatus::EndSubscribeRequest;
+  }
+  return mSession->AsyncRequest(newRequest, fn);
 }
 
 template <typename DecoderType>

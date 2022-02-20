@@ -55,10 +55,10 @@ int main(int argc, char **argv) {
 
     RestClient<ClientDecoder> restClient(argv[1], argv[2], decoder);
     restClient.SubscribeEndpoint("exchangeInfo", "symbol=BTCUSDT");
-    // restClient.SubscribeEndpoint("time");
+    restClient.SubscribeEndpoint("time");
     restClient.SubscribeEndpoint("trades", "symbol=BTCUSDT", "limit=10");
-    // restClient.SubscribeEndpoint("avgPrice","symbol=BTCUSDT");
-    // restClient.SubscribeEndpoint("ticker/bookTicker", "symbol=BTCUSDT");
+    restClient.SubscribeEndpoint("avgPrice","symbol=BTCUSDT");
+    restClient.SubscribeEndpoint("ticker/bookTicker", "symbol=BTCUSDT");
     std::future<void> clientFuture = std::async(std::launch::async, [&restClient]() {
         ClientImpl(restClient);
     });
