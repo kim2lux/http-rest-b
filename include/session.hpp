@@ -17,22 +17,12 @@ class Session : public std::enable_shared_from_this<Session> {
 public:
   explicit Session(net::io_context &ex, ssl::context &ctx,
                    const std::string &host, const std::string &port);
-  void run();
   RequestStatus AsyncRequest(std::string request, std::function<void(std::string &)>);
 
-  void Stop() {
-    mIoc.stop();
-  }
-
+  void Stop();
+  void Run();
   ~Session() { std::cout << "Destroy Session..." << std::endl; }
-
-  void ErrorHandle(beast::error_code &error, const char *ctx) {
-    std::cout << "Error occured in context:" << ctx << ", "
-              << error.category().name() << ": " << error.message()
-              << std::endl;
-    mError = error;
-    mIoc.stop();
-  }
+  void ErrorHandle(beast::error_code &error, const char *ctx);
 
 private:
   void ExecRequest(std::string request, std::function<void(std::string &)>);

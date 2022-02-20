@@ -11,19 +11,24 @@ Session::Session(net::io_context &ex, ssl::context &ctx,
       mHost(host), mPort(port) {
   mHandler = std::make_shared<Handler>(this);
 
-  //prepare request
+  // prepare request
   mHttpRequest.version(11);
   mHttpRequest.method(http::verb::get);
   mHttpRequest.set(http::field::host, mHost.data());
   mHttpRequest.keep_alive(true);
   mHttpRequest.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
 }
-
-void Session::run() {
+void Session::ErrorHandle(beast::error_code &error, const char *ctx) {
+  std::cout << "Error occured in context " << ctx << " : "
+            << error.category().name() << ": " << error.message() << std::endl;
+  mError = error;
+  mIoc.stop();
+}
+void Session::Run() {
   if (!SSL_set_tlsext_host_name(mStream.native_handle(), mHost.c_str())) {
     beast::error_code ec{static_cast<int>(::ERR_get_error()),
                          net::error::get_ssl_category()};
-    std::cerr << ec.message() << "\n";
+    std::cerr << ec.message() << std::endl;
     return;
   }
   // Look up the domain name
@@ -35,13 +40,12 @@ void Session::run() {
 void Session::ExecRequest(std::string request,
                           std::function<void(std::string &)> hdl) {
   mHttpRequest.target(request);
-  std::cout << "send execute : " << mHttpRequest << std::endl;
   mHandler->Write(mRequest.add(mHttpRequest, hdl).first);
   ;
 }
 
 RequestStatus Session::AsyncRequest(std::string request,
-                           std::function<void(std::string &)> hdl) {
+                                    std::function<void(std::string &)> hdl) {
   if (!mSessionReady) {
     std::this_thread::sleep_for(std::chrono::milliseconds{1000});
     return RequestStatus::SessionNotReady;
@@ -52,7 +56,9 @@ RequestStatus Session::AsyncRequest(std::string request,
   // Instance is running the context
   // implement throttle to handle api limit; 20 msg/sec
   // if throttle.TryStamp() == Throttle::OK {}
-  // -> circular buffer std::array<requestTimeStamp, 20>, check (currenttimestamp - (writer + 1)timestamp) < 1000ms ? yield wait : exec request
+  // -> circular buffer std::array<requestTimeStamp, 20>, check
+  // (currenttimestamp - (writer + 1)timestamp) < 1000ms ? yield wait : exec
+  // request
   boost::asio::post(
       mIoc, mStrandRequest.wrap([me = shared_from_this(), request, hdl]() {
         me->ExecRequest(request, hdl);
@@ -100,4 +106,8 @@ void Session::OnShutdown(beast::error_code ec) {
   if (ec) {
     return this->ErrorHandle(ec, "OnShutdown");
   }
+}
+
+void Session::Stop() {
+    mIoc.stop();
 }

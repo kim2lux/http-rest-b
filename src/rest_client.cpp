@@ -17,7 +17,7 @@ RestClient<DecoderType>::RestClient(const char *host, const char *port,
   mCtx.set_verify_mode(boost::asio::ssl::verify_none);
   mSession = std::make_shared<Session>(mIoc, mCtx, mHost, mPort);
   std::cout << "timeout per message: " << cTimeoutMs << std::endl;
-  mSession->run();
+  mSession->Run();
 }
 
 template <typename DecoderType>
