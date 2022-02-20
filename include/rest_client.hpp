@@ -5,46 +5,70 @@
 #include <future>
 #include <iostream>
 #include <memory>
-#include <string>
-#include <thread>
-#include <string_view>
 #include <stdint.h>
+#include <string>
+#include <string_view>
+#include <thread>
+#include <boost/asio/signal_set.hpp>
 
 #include "helper.hpp"
 #include "root_certificates.hpp"
 #include "session.hpp"
 
-namespace net = boost::asio; // from <boost/asio.hpp>
-static constexpr std::string_view cPrefix{"/api/v3/"};
-static constexpr uint64_t cBinanceLimitRequestPerMin = 60;
-static constexpr uint64_t cTimeoutMs = 1000 / (cBinanceLimitRequestPerMin / 60);
+namespace net = boost::asio;
 
+namespace restclient {
+
+static constexpr std::string_view cPrefix{"/api/v3/"};
+
+static constexpr uint64_t cMaxAsyncRequests = 20;
+static constexpr uint64_t cBinanceLimitRequestsPerMin = 60;
+static constexpr uint64_t cTimeoutMs = (1000 / (cBinanceLimitRequestsPerMin / 60));
 
 // assert: is base of decoder interface
 template <typename DecoderType> class RestClient {
 public:
+  static_assert(std::is_base_of_v<APIHandlerInterface, DecoderType> == true);
+
   explicit RestClient(const char *host, const char *port, DecoderType &decoder);
 
   void SubscribeEndpoint(std::string request);
-
-  template <typename F, typename = std::enable_if_t<std::is_invocable_v<F, const std::string&>>>
+  template <typename F, typename = std::enable_if_t<
+                            std::is_invocable_v<F, const std::string &>>>
   void SubscribeEndpoint(std::string request, F &&fn);
   template <typename... OPTS>
-  void SubscribeEndpoint(std::string request, OPTS&& ... opts);
-
+  void SubscribeEndpoint(std::string request, OPTS &&... opts);
+  // UnsubscribeEndpoint
+  template <typename F, typename = std::enable_if_t<
+                            std::is_invocable_v<F, const std::string &>>>
+   RequestStatus AsyncRequest(std::string request, F &&fn) {
+       std::string newRequest{request.insert(0, cPrefix)};
+       if (mSession->mError) {
+           return RequestStatus::SessionError;
+       }
+       if (mStopSubscriber) {
+           return RequestStatus::EndSubscribeRequest;
+       }
+      return mSession->AsyncRequest(newRequest, fn);
+  }
   void run();
 
 private:
-  template <typename F>
-  void RunTask(const std::string &request, F&& fn) const;
+  void LaunchTaskSubscribe() const;
+  void SignalHandler(const boost::system::error_code &error, int signal_number);
 
-  net::io_context ioc;
-  ssl::context ctx{ssl::context::tlsv12_client};
+  net::io_context mIoc;
+  ssl::context mCtx{ssl::context::tlsv12_client};
   std::string mHost;
   std::string mPort;
   std::shared_ptr<Session> mSession;
   DecoderType &mDecoder;
   std::vector<std::future<void>> mTasks;
+  std::atomic<bool> mStopSubscriber{false};
+  boost::asio::signal_set mSignal;
+  std::vector<std::pair<std::string, std::function<void(std::string &)>>> mSubscriber;
+  mutable std::future<void> mFutTasks;
 };
 
 #include "../src/rest_client.cpp"
+} // namespace restclient

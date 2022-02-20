@@ -7,7 +7,11 @@
 #include <optional>
 #include <sstream>
 #include <utility>
+#include <boost/beast/http.hpp>
 
+namespace http = boost::beast::http;
+
+namespace restclient {
 template <typename Callback, size_t SIZE = 4096> class RequestBuffer {
 private:
   static constexpr uint64_t LOG2(uint64_t size, int p = 0) {
@@ -20,17 +24,21 @@ private:
   static constexpr uint64_t mRingMask = GetClosestExp(SIZE) - 1;
 
 public:
-  using RequestType = std::pair<std::string, Callback>;
+  using RequestType = std::pair<http::request<http::empty_body>, Callback>;
 
-  void add(RequestType request) {
-    if (mWritePos - mReadPos >= mSize) {
+  RequestType &add(http::request<http::empty_body> &httpRequest,
+                   std::function<void(std::string &)> hdl) {
+    uint64_t currentWritePos = mWritePos.load();
+    if (currentWritePos - mReadPos >= mSize) {
       // could only return an error
       std::stringstream ss;
-      ss << "Write buffer full: " << mWritePos << " " << mReadPos << std::endl;
+      ss << "Write buffer full: " << currentWritePos << " " << mReadPos
+         << std::endl;
       throw ss.str();
     }
-    mRequests[mWritePos & mRingMask] = request;
+    mRequests[currentWritePos & mRingMask] = std::make_pair(httpRequest, hdl);
     mWritePos++;
+    return mRequests[currentWritePos & mRingMask];
   }
 
   std::optional<RequestType> get() {
@@ -50,3 +58,4 @@ public:
   std::atomic<uint64_t> mWritePos{0};
   std::atomic<uint64_t> mReadPos{0};
 };
+} // namespace restclient

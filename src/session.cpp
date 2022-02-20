@@ -1,11 +1,22 @@
 #include "session.hpp"
 #include "handler.hpp"
+#include <thread>
+using namespace restclient;
 
+namespace net = boost::asio;
 Session::Session(net::io_context &ex, ssl::context &ctx,
                  const std::string &host, const std::string &port)
-    : mResolver(ex), mStream(ex, ctx), mIoc{ex}, mStrandRequest(ex),
+    : mResolver(net::make_strand(ex)),
+      mStream(net::make_strand(ex), ctx), mIoc{ex}, mStrandRequest(ex),
       mHost(host), mPort(port) {
-  mHandler = std::make_shared<Handler>(this, mHost.c_str());
+  mHandler = std::make_shared<Handler>(this);
+
+  //prepare request
+  mHttpRequest.version(11);
+  mHttpRequest.method(http::verb::get);
+  mHttpRequest.set(http::field::host, mHost.data());
+  mHttpRequest.keep_alive(true);
+  mHttpRequest.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
 }
 
 void Session::run() {
@@ -21,31 +32,40 @@ void Session::run() {
       beast::bind_front_handler(&Session::OnResolve, shared_from_this()));
 }
 
-void Session::ExecRequest(
-    typename RequestBuffer<std::function<void(std::string &)>>::RequestType
-        request) {
-  mHandler->Write(request.first);
-  mRequest.add(request);
+void Session::ExecRequest(std::string request,
+                          std::function<void(std::string &)> hdl) {
+  mHttpRequest.target(request);
+  std::cout << "send execute : " << mHttpRequest << std::endl;
+  mHandler->Write(mRequest.add(mHttpRequest, hdl).first);
+  ;
 }
 
-void Session::AsyncRequest(std::string request,
+RequestStatus Session::AsyncRequest(std::string request,
                            std::function<void(std::string &)> hdl) {
   if (!mSessionReady) {
-    std::cout << "Session not ready" << std::endl;
-    return;
+    std::this_thread::sleep_for(std::chrono::milliseconds{1000});
+    return RequestStatus::SessionNotReady;
   }
+
+  // Use post to synchronize writing thread:
+  // Make sure that only one thread can access ExecRequest as only a single
+  // Instance is running the context
+  // implement throttle to handle api limit; 20 msg/sec
+  // if throttle.TryStamp() == Throttle::OK {}
+  // -> circular buffer std::array<requestTimeStamp, 20>, check (currenttimestamp - (writer + 1)timestamp) < 1000ms ? yield wait : exec request
   boost::asio::post(
       mIoc, mStrandRequest.wrap([me = shared_from_this(), request, hdl]() {
-        me->ExecRequest(std::make_pair(request, hdl));
+        me->ExecRequest(request, hdl);
       }));
-  return;
+  return RequestStatus::RequestSent;
 }
 
 void Session::OnResolve(beast::error_code ec,
                         tcp::resolver::results_type results) {
-  if (ec)
-    return helper::Fail(ec, "resolve");
-  beast::get_lowest_layer(mStream).expires_after(std::chrono::seconds(30));
+  if (ec) {
+    return ErrorHandle(ec, "resolve");
+  }
+  beast::get_lowest_layer(mStream).expires_after(std::chrono::seconds(5));
   beast::get_lowest_layer(mStream).async_connect(
       results,
       beast::bind_front_handler(&Session::OnConnect, shared_from_this()));
@@ -53,26 +73,31 @@ void Session::OnResolve(beast::error_code ec,
 
 void Session::OnConnect(beast::error_code ec,
                         tcp::resolver::results_type::endpoint_type) {
-  if (ec)
-    return helper::Fail(ec, "connect");
+  if (ec) {
+    return ErrorHandle(ec, "OnConnect");
+  }
+  std::cout << "Connected to host: " << mHost << std::endl;
   mStream.async_handshake(
       ssl::stream_base::client,
       beast::bind_front_handler(&Session::OnHandshake, shared_from_this()));
 }
 
 void Session::OnHandshake(beast::error_code ec) {
-  if (ec)
-    return helper::Fail(ec, "handshake");
+  if (ec) {
+    return this->ErrorHandle(ec, "OnHandshake");
+  }
   beast::get_lowest_layer(mStream).expires_after(std::chrono::seconds(3600));
-  std::cout << "Connection is ready for request..." << std::endl;
+  std::cout << "Ready to start request." << std::endl;
   mSessionReady = true;
   mHandler->Read();
 }
 
 void Session::OnShutdown(beast::error_code ec) {
+  std::cout << "Stream has been shut down" << std::endl;
   if (ec == net::error::eof) {
     ec = {};
   }
-  if (ec)
-    return helper::Fail(ec, "shutdown");
+  if (ec) {
+    return this->ErrorHandle(ec, "OnShutdown");
+  }
 }
