@@ -38,14 +38,13 @@ void Session::Run() {
 }
 
 void Session::ExecRequest(std::string request,
-                          std::function<void(std::string &)> hdl) {
+                          typename Session::HandlerType hdl) {
   mHttpRequest.target(request);
   mHandler->Write(mRequest.add(mHttpRequest, hdl).first);
-  ;
 }
 
 RequestStatus Session::AsyncRequest(std::string request,
-                                    std::function<void(std::string &)> hdl) {
+                                    typename Session::HandlerType hdl) {
   if (!mSessionReady) {
     std::this_thread::sleep_for(std::chrono::milliseconds{1000});
     return RequestStatus::SessionNotReady;

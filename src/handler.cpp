@@ -3,11 +3,9 @@
 
 using namespace restclient;
 
-Handler::Handler(Session *const session) : mSession(session) {
-}
+Handler::Handler(Session *const session) : mSession(session) {}
 
 void Handler::Read() {
-
   mHttpResult = http::response<http::string_body>{};
   http::async_read(
       mSession->mStream, mBuffer, mHttpResult,
@@ -21,12 +19,10 @@ void Handler::OnRead(beast::error_code ec, std::size_t bytes_transferred) {
     return mSession->ErrorHandle(ec, "OnRead");
   }
 
-  //mHttpRequest.method().
-  mHttpResult.base();
   auto request = mSession->mRequest.get();
   if (request) {
-      auto [req, handle] = (*request);
-      handle(mHttpResult.body());
+    auto [req, hdl] = (*request);
+    hdl(mHttpResult.body(), mHttpResult.base().result_int(), req.target());
   }
   Read();
 }
@@ -38,7 +34,8 @@ void Handler::OnWrite(beast::error_code ec, std::size_t bytes_transferred) {
   }
 }
 
-void Handler::Write(const http::request<http::empty_body>& httpRequest) {
+void Handler::Write(const http::request<http::empty_body> &httpRequest) {
   http::async_write(
-      mSession->mStream, httpRequest, beast::bind_front_handler(&Handler::OnWrite, shared_from_this()));
+      mSession->mStream, httpRequest,
+      beast::bind_front_handler(&Handler::OnWrite, shared_from_this()));
 }

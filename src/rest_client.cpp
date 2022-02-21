@@ -16,7 +16,6 @@ RestClient<DecoderType>::RestClient(const char *host, const char *port,
 
   mCtx.set_verify_mode(boost::asio::ssl::verify_none);
   mSession = std::make_shared<Session>(mIoc, mCtx, mHost, mPort);
-  std::cout << "timeout per message: " << cTimeoutMs << std::endl;
   mSession->Run();
 }
 
@@ -32,9 +31,9 @@ template <typename DecoderType>
 void RestClient<DecoderType>::SubscribeEndpoint(std::string request) {
   std::string newRequest{request.insert(0, cPrefix)};
     auto callbackFunc = [decoder = std::ref(this->mDecoder)](
-                            std::string &data) mutable -> void {
+                            std::string &data, uint32_t result, boost::beast::string_view target) mutable -> void {
       // dispatch depending of request
-      decoder.get().info(data);
+      decoder.get().dispatch(data, result, target);
     };
   mSubscriber.emplace_back(std::make_pair(newRequest,callbackFunc));
 }
@@ -53,11 +52,11 @@ void RestClient<DecoderType>::SubscribeEndpoint(std::string request,
   std::string newRequest{request.insert(0, cPrefix)};
   newRequest.append(helper::GetTargetOpts(opts...));
     auto callbackFunc = [decoder = std::ref(this->mDecoder)](
-                            std::string &data) mutable -> void {
+                            std::string &data, uint32_t result, boost::beast::string_view target) mutable -> void {
       // dispatch depending of request
-      decoder.get().info(data);
+      decoder.get().dispatch(data, result, target);
     };
-  mSubscriber.emplace_back(std::make_pair(newRequest,callbackFunc));
+  mSubscriber.emplace_back(std::make_pair(newRequest, callbackFunc));
 }
 
 template <typename DecoderType> void RestClient<DecoderType>::run() {

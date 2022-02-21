@@ -1,45 +1,10 @@
 
-#include "decoder.hpp"
+
 #include "rest_client.hpp"
-#include "session.hpp"
+#include "client_decoder_example.hpp"
 
 namespace net = boost::asio;
 using namespace restclient;
-
-class ClientDecoder final : public APIHandlerInterface {
-public:
-  explicit ClientDecoder() noexcept {}
-  void ping(std::string &data) const override {
-    // data should be copied
-    std::cout << "receive ping: " << data << std::endl;
-  }
-
-  void info(std::string &data) const override {
-    // data should be copied
-    std::cout << "receive info: " << data << std::endl;
-  }
-};
-
-void ExamplePingLambda(const std::string &data) {
-  // data should be copied
-  // callback are holding read async, no extra processing in client handler should be done (same thread)
-  std::cout << "receive a ping: " << data << std::endl;
-}
-
-void ClientImpl(RestClient<ClientDecoder> &client) {
-  auto myAsyncLambda = [](const std::string &data) { ExamplePingLambda(data); };
-
-  while (true) {
-    std::cout << "Client Code Implementation sending async request" << std::endl;
-    auto status = client.AsyncRequest("ping", myAsyncLambda);
-    std::cout << "request status: " << status << std::endl;
-    if (status == RequestStatus::SessionError ||
-        status == RequestStatus::EndSubscribeRequest) {
-      return;
-    }
-    std::this_thread::sleep_for(std::chrono::milliseconds{1000});
-  }
-}
 
 int main(int argc, char **argv) {
   // Check command line arguments.

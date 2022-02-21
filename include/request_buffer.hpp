@@ -27,7 +27,7 @@ public:
   using RequestType = std::pair<http::request<http::empty_body>, Callback>;
 
   RequestType &add(http::request<http::empty_body> &httpRequest,
-                   std::function<void(std::string &)> hdl) {
+                   Callback hdl) {
     uint64_t currentWritePos = mWritePos.load();
     if (currentWritePos - mReadPos >= mSize) {
       // could only return an error
