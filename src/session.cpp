@@ -91,7 +91,7 @@ void Session::OnHandshake(beast::error_code ec) {
   if (ec) {
     return this->ErrorHandle(ec, "OnHandshake");
   }
-  beast::get_lowest_layer(mStream).expires_after(std::chrono::seconds(3600));
+  beast::get_lowest_layer(mStream).expires_never();
   std::cout << "Ready to start request." << std::endl;
   mSessionReady = true;
   mHandler->Read();
